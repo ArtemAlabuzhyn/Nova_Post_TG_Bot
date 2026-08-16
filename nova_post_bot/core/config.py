@@ -1,8 +1,12 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from nova_post_bot.core.settings.postgres import PostgresSettings
+
 
 class Settings(BaseSettings):
+    postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+
     app_env: str = Field(
         default="development",
         validation_alias='APP_ENV',
@@ -24,5 +28,12 @@ class Settings(BaseSettings):
         extra='ignore'
     )
 
-settings = Settings()
+    def postgres_dsn(self):
+        return (
+            f"postgresql+asyncpg://"
+            f"{self.postgres.user}:{self.postgres.password}"
+            f"@{self.postgres.host}:{self.postgres.port}/{self.postgres.db}"
+        )
 
+
+settings = Settings()
