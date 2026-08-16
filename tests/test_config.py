@@ -1,4 +1,4 @@
-from nova_post_bot.config import settings
+from nova_post_bot.core.config import settings
 
 def test_app_env_is_development():
     assert settings.app_env == 'development'

@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from nova_post_bot.config import settings
+from nova_post_bot.core.config import settings
 
 bot = Bot(token=settings.telegram_bot_token)
 
