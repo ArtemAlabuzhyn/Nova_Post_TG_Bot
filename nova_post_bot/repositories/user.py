@@ -1,8 +1,9 @@
-import uuid
+import datetime
+
+from sqlalchemy import select
 
 from nova_post_bot.models.user import User
 from nova_post_bot.repositories.base import BaseRepository
-from sqlalchemy import select
 
 
 class UserRepository(BaseRepository):
@@ -19,3 +20,13 @@ class UserRepository(BaseRepository):
         result = await self.session.execute(select(self.model).where(model_id == telegram_id))
         return result.scalar_one_or_none()
 
+    async def update_user(self, user: User,
+                          username: str | None,
+                          first_name: str,
+                          last_activity_at: datetime.datetime) -> User:
+        user.username = username
+        user.first_name = first_name
+        user.last_activity_at = last_activity_at
+
+        await self.session.flush()
+        return user
