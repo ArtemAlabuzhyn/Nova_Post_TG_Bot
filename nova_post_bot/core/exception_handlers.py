@@ -11,3 +11,4 @@ async def global_exception_handler(event: ErrorEvent):
     )
     if event.update.message:
         await event.update.message.answer("Something went wrong. Try again later.")
+
