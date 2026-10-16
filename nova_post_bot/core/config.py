@@ -6,6 +6,12 @@ from nova_post_bot.core.settings.postgres import PostgresSettings
 
 class Settings(BaseSettings):
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    nova_post_timeout: float = Field(default=10.0, validation_alias='NOVA_POST_TIMEOUT', gt=0)
+    nova_post_api_url: str = Field(validation_alias='NOVA_POST_API_URL')
+
+    allowed_telegram_ids: set[int] = Field(default_factory=set, validation_alias='ALLOWED_TELEGRAM_IDS')
+
+
 
     app_env: str = Field(
         default="development",

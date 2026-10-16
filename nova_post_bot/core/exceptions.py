@@ -8,3 +8,15 @@ class ObjectNotFoundError(Exception):
 
 class NovaPostAPIError(Exception):
     pass
+
+class NovaPostUnexpectedResponseError(NovaPostAPIError):
+    pass
+
+class NovaPostTimeoutError(NovaPostAPIError):
+    pass
+
+class NovaPostConnectionError(NovaPostAPIError):
+    pass
+
+class NovaPostValidationError(NovaPostAPIError):
+    pass
