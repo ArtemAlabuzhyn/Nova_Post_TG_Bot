@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from nova_post_bot.clients.nova_post import NovaPostClient
+from nova_post_bot.services.tracking import TrackingService
 from nova_post_bot.core.config import settings
 from nova_post_bot.core.exception_handlers import global_exception_handler
 from nova_post_bot.handlers.start import router as start_router
@@ -37,7 +38,8 @@ async def main():
                                       timeout=settings.nova_post_timeout)
 
     try:
-        await dp.start_polling(bot, nova_post_client=nova_post_client)
+        tracking_service = TrackingService(nova_post_client=nova_post_client)
+        await dp.start_polling(bot, tracking_service=tracking_service)
     finally:
         await nova_post_client.close()
 

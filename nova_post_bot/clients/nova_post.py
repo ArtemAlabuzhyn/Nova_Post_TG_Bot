@@ -85,6 +85,16 @@ class NovaPostClient:
                            called_method)
             raise NovaPostUnexpectedResponseError("Expected a boolean 'success' field")
         if not success:
+            error_codes = json_response.get("errorCodes")
+            invalid_number_code = "20001401442"
+            if isinstance(error_codes, list):
+                if invalid_number_code in error_codes:
+                    logger.warning(
+                        "Nova Post API operation: method=%s success=False reason=invalid_tracking_number",
+                        called_method,
+                    )
+                    raise NovaPostValidationError("Nova Post rejected the tracking number")
+
             logger.warning("Nova Post API operation: method=%s success=False, reason=api_error",
                            called_method)
             raise NovaPostAPIError("Nova Post API reported an error")
