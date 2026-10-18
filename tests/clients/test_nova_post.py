@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+
 from nova_post_bot.clients.nova_post import NovaPostClient
 from nova_post_bot.core.exceptions import NovaPostValidationError, NovaPostTimeoutError, NovaPostAPIError, \
     NovaPostUnexpectedResponseError
@@ -108,3 +109,23 @@ async def test_tracking_invalid_response():
         client.http_client.post.assert_awaited_once()
     finally:
         await client.close()
+
+@pytest.mark.asyncio
+async def test_tracking_api_rejects_number():
+    client = NovaPostClient(api_key="test_key", base_url="https://example.com/", timeout=10)
+    response = MagicMock()
+    client.http_client.post = AsyncMock(return_value=response)
+    response.json.return_value = {
+        "success": False,
+        "errors": ["Document number is not correct"],
+        "errorCodes": ["20001401442"],
+        "data": []
+    }
+    try:
+        with pytest.raises(NovaPostValidationError):
+            await client.get_tracking_info(number="00000000000000")
+
+        client.http_client.post.assert_awaited_once()
+    finally:
+        await client.close()
+

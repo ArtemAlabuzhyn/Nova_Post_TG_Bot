@@ -1,33 +1,44 @@
 from aiogram import F, Router
-from aiogram.types import Message
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
 
-from nova_post_bot.clients.nova_post import NovaPostClient
-from nova_post_bot.core.exceptions import NovaPostAPIError
+from nova_post_bot.core.exceptions import NovaPostAPIError, NovaPostValidationError, NovaPostTimeoutError
+from nova_post_bot.formatters.tracking import format_tracking_info
+from nova_post_bot.keyboards.main_menu import main_menu
+from nova_post_bot.keyboards.tracking import tracking_keyboard
+from nova_post_bot.services.tracking import TrackingService
 from nova_post_bot.states.tracking import TrackingStates
 
 router = Router()
 
-PAYER_LABELS = {"Sender": "Отправитель", "Recipient": "Получатель"}
-PAYMENT_METHOD_LABELS = {"NonCash": "Безналичный расчет"}
 
 @router.message(F.text == "Отследить ТТН")
 async def tracking(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(TrackingStates.waiting_for_number)
-    await message.answer("Введите номер ТТН:")
+    await message.answer("Введите номер ТТН:", reply_markup=tracking_keyboard)
+
+
+@router.message(TrackingStates.waiting_for_number, Command("cancel"))
+@router.message(TrackingStates.waiting_for_number, F.text == "Передумал")
+async def cancel_tracking(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Ну и ... ладно", reply_markup=main_menu)
 
 
 @router.message(TrackingStates.waiting_for_number, F.text)
 async def process_tracking_number(message: Message, state: FSMContext,
-                                  nova_post_client: NovaPostClient):
-    number = message.text.strip()
-    if number == "":
-        await message.answer("Номер ТТН не может быть пустым. Пожалуйста, введите номер ТТН:")
-        return
-
+                                  tracking_service: TrackingService):
     try:
-        tracking_items = await nova_post_client.get_tracking_info(number=number)
+        tracking_items = await tracking_service.get_tracking_info(number=message.text)
+
+    except NovaPostValidationError:
+        await message.answer("Некорректный номер ТТН. Проверьте номер: он должен содержать 14 цифр.")
+        return
+    except NovaPostTimeoutError:
+        await message.answer("НП в данный момент не отвечает. Попробуйте позже.")
+        return
 
     except NovaPostAPIError:
         await message.answer("Не удалось получить статус. Попробуйте позже или проверьте номер ТТН")
@@ -35,27 +46,13 @@ async def process_tracking_number(message: Message, state: FSMContext,
 
     await state.clear()
     if tracking_items == []:
-        await message.answer("Информация по этой ТТН не найдена.")
+        await message.answer("Информация по этой ТТН не найдена.", reply_markup=main_menu)
         return
 
-
     for tracking_item in tracking_items:
-        payer_label = PAYER_LABELS.get(tracking_item.payer_type, "Не определен")
-        payment_method = PAYMENT_METHOD_LABELS.get(tracking_item.payment_method, "Не определен")
-        cost_label = f"{tracking_item.document_cost:.2f} грн" \
-            if tracking_item.document_cost is not None else "Не указана"
-        await message.answer(
-            f"Номер ТТН: {tracking_item.number}\n"
-            f"Статус: {tracking_item.status}\n"
-            f"Описание: {tracking_item.cargo_description or "Не указано"}\n"
-            f"Город отправки: {tracking_item.sender_city or "Не указано"}\n"
-            f"Отделение отправки: {tracking_item.sender_warehouse or "Не указано"}\n"
-            f"Город получения: {tracking_item.recipient_city or "Не указано"}\n"
-            f"Отделение получения: {tracking_item.recipient_warehouse or "Не указано"}\n"
-            f"Получатель: {tracking_item.recipient_full_name 
-                           or tracking_item.recipient_full_name_ew 
-                           or "Не указано"}\n"
-            f"Плательщик: {payer_label}\n"
-            f"Способ расчета: {payment_method}\n"
-            f"Стоимость доставки: {cost_label}\n"
-        )
+        text = format_tracking_info(tracking_item)
+        await message.answer(text, parse_mode="HTML", reply_markup=main_menu)
+
+@router.message(TrackingStates.waiting_for_number, ~F.text)
+async def process_tracking_non_text(message: Message):
+    await message.answer("Пожалуйста, введите номер ТТН (14 цифр) или нажмите 'Передумал' для отмены.")
