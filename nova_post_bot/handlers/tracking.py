@@ -1,12 +1,11 @@
 from aiogram import F, Router
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from nova_post_bot.core.exceptions import NovaPostAPIError, NovaPostValidationError, NovaPostTimeoutError
 from nova_post_bot.formatters.tracking import format_tracking_info
+from nova_post_bot.keyboards.cancel import cancel_keyboard
 from nova_post_bot.keyboards.main_menu import main_menu
-from nova_post_bot.keyboards.tracking import tracking_keyboard
 from nova_post_bot.services.tracking import TrackingService
 from nova_post_bot.states.tracking import TrackingStates
 
@@ -17,14 +16,7 @@ router = Router()
 async def tracking(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(TrackingStates.waiting_for_number)
-    await message.answer("Введите номер ТТН:", reply_markup=tracking_keyboard)
-
-
-@router.message(TrackingStates.waiting_for_number, Command("cancel"))
-@router.message(TrackingStates.waiting_for_number, F.text == "Передумал")
-async def cancel_tracking(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Ну и ... ладно", reply_markup=main_menu)
+    await message.answer("Введите номер ТТН:", reply_markup=cancel_keyboard)
 
 
 @router.message(TrackingStates.waiting_for_number, F.text)

@@ -5,7 +5,9 @@ import logging
 
 from nova_post_bot.core.exceptions import NovaPostUnexpectedResponseError, NovaPostAPIError, NovaPostTimeoutError, \
     NovaPostConnectionError, NovaPostValidationError
+from nova_post_bot.schemas.city import CityInfo
 from nova_post_bot.schemas.tracking import TrackingInfo
+from nova_post_bot.schemas.warehouse import WarehouseInfo
 
 logger = logging.getLogger(__name__)
 
@@ -127,3 +129,44 @@ class NovaPostClient:
                                    method_properties=method_properties)
 
         return self._parse_tracking(data)
+
+    async def search_cities(self, query: str) -> list[CityInfo]:
+        query = self._normalize_required_string(query, "Query")
+        data = await self._request(model_name="Address",
+                                   called_method="getCities",
+                                   method_properties={"FindByString": query})
+        return self._parse_cities(data)
+
+    def _parse_cities(self, cities_data: list) -> list[CityInfo]:
+        try:
+            cities = [CityInfo.model_validate(item) for item in cities_data]
+        except pydantic.ValidationError as exc:
+            raise NovaPostUnexpectedResponseError("Invalid city response") from exc
+        return cities
+
+    async def search_warehouses(self, city_ref: str, query: str) -> list[WarehouseInfo]:
+        city_ref = self._normalize_required_string(city_ref, "CityRef")
+        query = self._normalize_required_string(query, "Query")
+        if not query.isascii() or not query.isdigit():
+            raise NovaPostValidationError("Warehouse number must contain only digits")
+        data = await self._request(model_name="Address", called_method="getWarehouses",
+                                   method_properties={"CityRef": city_ref,
+                                                      "FindByString": f"№{query}"})
+        return self._parse_warehouse(data)
+
+    def _parse_warehouse(self, warehouse_data: list) -> list[WarehouseInfo]:
+        try:
+            warehouses = [WarehouseInfo.model_validate(item) for item in warehouse_data]
+        except pydantic.ValidationError as exc:
+            raise NovaPostUnexpectedResponseError("Invalid warehouse response") from exc
+        return warehouses
+
+    @staticmethod
+    def _normalize_required_string(value: str, field_name: str) -> str:
+        if not isinstance(value, str):
+            raise NovaPostValidationError(f"{field_name} must be a string")
+
+        value = value.strip()
+        if not value:
+            raise NovaPostValidationError(f"{field_name} cannot be empty")
+        return value

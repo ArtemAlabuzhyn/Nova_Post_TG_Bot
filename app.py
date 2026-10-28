@@ -14,18 +14,24 @@ from nova_post_bot.middlewares.access import AccessMiddleware
 from nova_post_bot.middlewares.db import DatabaseMiddleware
 from nova_post_bot.handlers.fallback import router as fallback_router
 from nova_post_bot.handlers.tracking import router as tracking_router
+from nova_post_bot.handlers.recipients import router as recipient_router
+from nova_post_bot.handlers.cancel import router as cancel_router
+from nova_post_bot.handlers.recipient_addresses import router as recipient_addresses_router
 
 bot = Bot(token=settings.telegram_bot_token)
 
 dp = Dispatcher()
-dp.update.outer_middleware(AccessMiddleware(allowed_telegram_ids=settings.allowed_telegram_ids))
+dp.update.outer_middleware(AccessMiddleware(allowed_telegram_ids=set(settings.allowed_telegram_ids)))
 dp.update.outer_middleware(DatabaseMiddleware())
 dp.errors.register(global_exception_handler)
 
 dp.include_router(start_router)
 dp.include_router(help_router)
 dp.include_router(menu_router)
+dp.include_router(cancel_router)
+dp.include_router(recipient_addresses_router)
 dp.include_router(tracking_router)
+dp.include_router(recipient_router)
 dp.include_router(fallback_router)
 
 
@@ -39,7 +45,9 @@ async def main():
 
     try:
         tracking_service = TrackingService(nova_post_client=nova_post_client)
-        await dp.start_polling(bot, tracking_service=tracking_service)
+        await dp.start_polling(bot,
+                               tracking_service=tracking_service,
+                               nova_post_client=nova_post_client)
     finally:
         await nova_post_client.close()
 

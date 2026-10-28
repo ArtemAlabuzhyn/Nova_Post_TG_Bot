@@ -9,6 +9,9 @@ from pathlib import Path
 from nova_post_bot.core.config import settings
 from nova_post_bot.models.base import Base
 from nova_post_bot.models.user import User
+from nova_post_bot.models.recipient import Recipient
+from nova_post_bot.models.recipient_audit import RecipientAudit
+from nova_post_bot.models.recipient_address import RecipientAddress
 
 
 # this is the Alembic Config object, which provides
@@ -100,7 +103,11 @@ async def run_migrations_online() -> None:
 
     """
     url = config.get_main_option("sqlalchemy.url")
-    connectable = create_async_engine(url, poolclass=pool.NullPool)
+    connectable = create_async_engine(
+        url,
+        poolclass=pool.NullPool,
+        connect_args={"ssl": False},
+    )
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
