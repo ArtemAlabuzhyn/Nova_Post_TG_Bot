@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     nova_post_timeout: float = Field(default=10.0, validation_alias='NOVA_POST_TIMEOUT', gt=0)
     nova_post_api_url: str = Field(validation_alias='NOVA_POST_API_URL')
 
-    allowed_telegram_ids: set[int] = Field(default_factory=set, validation_alias='ALLOWED_TELEGRAM_IDS')
+    allowed_telegram_ids: dict[int, str] = Field(default_factory=dict, validation_alias='ALLOWED_TELEGRAM_IDS')
 
 
 

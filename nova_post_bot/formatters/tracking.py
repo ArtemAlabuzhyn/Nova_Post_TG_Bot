@@ -3,7 +3,8 @@ from html import escape
 
 
 PAYER_LABELS = {"Sender": "Отправитель", "Recipient": "Получатель"}
-PAYMENT_METHOD_LABELS = {"NonCash": "Безналичный расчет"}
+PAYMENT_METHOD_LABELS = {"NonCash": "Безналичный расчет",
+                         "Cash": "Наличный расчет"}
 
 def format_tracking_info(tracking_info: TrackingInfo) -> str:
     cost_label = (
