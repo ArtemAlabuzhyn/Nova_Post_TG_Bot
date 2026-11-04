@@ -1,5 +1,7 @@
 import pydantic
 from decimal import Decimal
+from datetime import date
+
 
 
 class TrackingInfo(pydantic.BaseModel):
@@ -18,14 +20,20 @@ class TrackingInfo(pydantic.BaseModel):
     recipient_warehouse: str | None = pydantic.Field(default=None, validation_alias="WarehouseRecipient")
     recipient_full_name: str | None = pydantic.Field(default=None, validation_alias="RecipientFullName")
     recipient_full_name_ew: str | None = pydantic.Field(default=None, validation_alias="RecipientFullNameEW")
+    recipient_phone: str | None = pydantic.Field(default=None, validation_alias="PhoneRecipient")
     payer_type: str | None = pydantic.Field(default=None, validation_alias="PayerType")
     payment_method: str | None = pydantic.Field(default=None, validation_alias="PaymentMethod")
 
     document_cost: Decimal | None = pydantic.Field(default=None, validation_alias="DocumentCost")
+    storage_price: Decimal | None = pydantic.Field(default=None, validation_alias="StoragePrice")
+    storage_start_date: date | None = pydantic.Field(default=None, validation_alias="DateFirstDayStorage")
 
-    @pydantic.field_validator('document_cost', mode='before')
+    @pydantic.field_validator('document_cost', 'storage_price',
+                              'storage_start_date', mode='before')
     @classmethod
-    def empty_cost_to_none(cls, value):
-        if isinstance(value, str) and value.strip() == "":
-            return None
+    def empty_value_to_none(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
         return value

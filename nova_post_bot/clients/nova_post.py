@@ -1,10 +1,11 @@
+import logging
+import time
+
 import httpx
 import pydantic
-import time
-import logging
 
 from nova_post_bot.core.exceptions import NovaPostUnexpectedResponseError, NovaPostAPIError, NovaPostTimeoutError, \
-    NovaPostConnectionError, NovaPostValidationError
+    NovaPostConnectionError, NovaPostValidationError, NovaPostRejectedError
 from nova_post_bot.schemas.city import CityInfo
 from nova_post_bot.schemas.tracking import TrackingInfo
 from nova_post_bot.schemas.warehouse import WarehouseInfo
@@ -99,7 +100,7 @@ class NovaPostClient:
 
             logger.warning("Nova Post API operation: method=%s success=False, reason=api_error",
                            called_method)
-            raise NovaPostAPIError("Nova Post API reported an error")
+            raise NovaPostRejectedError("Nova Post API reported an error")
 
         data = json_response.get("data")
         if not isinstance(data, list):
@@ -170,3 +171,43 @@ class NovaPostClient:
         if not value:
             raise NovaPostValidationError(f"{field_name} cannot be empty")
         return value
+
+    async def get_sender_counterparties(self) -> list[dict]:
+        return await self._request(
+            model_name="Counterparty",
+            called_method="getCounterparties",
+            method_properties={
+                "CounterpartyProperty": "Sender",
+                "Page": "1",
+            }
+        )
+
+    async def get_counterparty_contact_persons(self, counterparty_ref: str) -> list[dict]:
+        counterparty_ref = self._normalize_required_string(counterparty_ref,
+                                                           "CounterpartyRef")
+        return await self._request(
+            model_name="Counterparty",
+            called_method="getCounterpartyContactPersons",
+            method_properties={
+                "Ref": counterparty_ref,
+            }
+        )
+
+    async def search_sender_warehouses(self,
+                                      city_ref: str,
+                                      query: str) -> list[WarehouseInfo]:
+        warehouses = await self.search_warehouses(city_ref=city_ref, query=query)
+        return [
+            warehouse for warehouse in warehouses
+            if warehouse.category == "Branch"
+        ]
+
+    async def get_recipient_counterparties(self) -> list[dict]:
+        return await self._request(
+            model_name="Counterparty",
+            called_method="getCounterparties",
+            method_properties={
+                "CounterpartyProperty": "Recipient",
+                "Page": "1",
+            }
+        )

@@ -1,6 +1,7 @@
 from nova_post_bot.db.session import SessionLocal
 from nova_post_bot.repositories.recipient_address import RecipientAddressRepository
 from nova_post_bot.repositories.recipient_audit import RecipientAuditRepository
+from nova_post_bot.repositories.shipment import ShipmentRepository
 from nova_post_bot.repositories.user import UserRepository
 from nova_post_bot.repositories.recipient import RecipientRepository
 
@@ -16,6 +17,7 @@ class UnitOfWork:
         self.recipients = RecipientRepository(self.session)
         self.recipient_audit = RecipientAuditRepository(self.session)
         self.recipient_addresses = RecipientAddressRepository(self.session)
+        self.shipments = ShipmentRepository(self.session)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

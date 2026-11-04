@@ -16,6 +16,7 @@ from nova_post_bot.handlers.fallback import router as fallback_router
 from nova_post_bot.handlers.tracking import router as tracking_router
 from nova_post_bot.handlers.recipients import router as recipient_router
 from nova_post_bot.handlers.cancel import router as cancel_router
+from nova_post_bot.handlers.shipment import router as shipment_router
 from nova_post_bot.handlers.recipient_addresses import router as recipient_addresses_router
 
 bot = Bot(token=settings.telegram_bot_token)
@@ -31,6 +32,7 @@ dp.include_router(menu_router)
 dp.include_router(cancel_router)
 dp.include_router(recipient_addresses_router)
 dp.include_router(tracking_router)
+dp.include_router(shipment_router)
 dp.include_router(recipient_router)
 dp.include_router(fallback_router)
 

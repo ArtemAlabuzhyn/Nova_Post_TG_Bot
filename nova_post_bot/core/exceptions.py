@@ -25,3 +25,6 @@ class ObjectAlreadyExistsError(Exception):
     def __init__(self, object_name: str = "Object"):
         self.object_name = object_name
         super().__init__(f"{object_name}: already exists")
+
+class NovaPostRejectedError(NovaPostAPIError):
+    pass

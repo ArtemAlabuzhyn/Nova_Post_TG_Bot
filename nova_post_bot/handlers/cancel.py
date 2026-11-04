@@ -7,6 +7,7 @@ from aiogram.exceptions import TelegramBadRequest
 from nova_post_bot.keyboards.main_menu import main_menu
 from nova_post_bot.states.recipient import RecipientStates, RecipientEditStates, RecipientArchiveStates
 from nova_post_bot.states.recipient_address import RecipientAddressStates, RecipientAddressEditStates
+from nova_post_bot.states.shipment import ShipmentStates
 from nova_post_bot.states.tracking import TrackingStates
 
 router = Router()
@@ -24,6 +25,8 @@ router = Router()
 @router.message(StateFilter(RecipientArchiveStates), F.text == "Передумал")
 @router.message(StateFilter(RecipientAddressEditStates), Command("cancel"))
 @router.message(StateFilter(RecipientAddressEditStates), F.text == "Передумал")
+@router.message(StateFilter(ShipmentStates), Command("cancel"))
+@router.message(StateFilter(ShipmentStates), F.text == "Передумал")
 async def cancel_current_action(message: Message, state: FSMContext):
     data = await state.get_data()
     confirmation_message_id = data.get("confirmation_message_id")

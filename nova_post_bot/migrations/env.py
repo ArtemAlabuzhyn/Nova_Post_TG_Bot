@@ -12,6 +12,7 @@ from nova_post_bot.models.user import User
 from nova_post_bot.models.recipient import Recipient
 from nova_post_bot.models.recipient_audit import RecipientAudit
 from nova_post_bot.models.recipient_address import RecipientAddress
+from nova_post_bot.models.shipment import Shipment
 
 
 # this is the Alembic Config object, which provides

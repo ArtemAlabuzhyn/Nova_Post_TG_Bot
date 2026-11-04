@@ -6,3 +6,4 @@ class WarehouseInfo(pydantic.BaseModel):
     name: str = pydantic.Field(validation_alias="Description")
     number: str = pydantic.Field(validation_alias="Number")
     city_ref: str = pydantic.Field(validation_alias="CityRef")
+    category: str = pydantic.Field(validation_alias="CategoryOfWarehouse")
