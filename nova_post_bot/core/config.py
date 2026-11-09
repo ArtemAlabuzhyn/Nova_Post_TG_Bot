@@ -34,6 +34,23 @@ class Settings(BaseSettings):
         extra='ignore'
     )
 
+    nova_post_sender_ref: str = Field(
+        validation_alias='NOVA_POST_SENDER_REF',
+    )
+
+    nova_post_sender_contact_ref: str = Field(
+        validation_alias='NOVA_POST_SENDER_CONTACT_REF',
+    )
+
+    nova_post_sender_phone: str = Field(
+        validation_alias='NOVA_POST_SENDER_PHONE',
+    )
+
+
+    shipment_requester_input_ids: set[int] = Field(
+        default_factory=set,
+        validation_alias='SHIPMENT_REQUESTER_INPUT_IDS',
+    )
     def postgres_dsn(self):
         return (
             f"postgresql+asyncpg://"

@@ -12,6 +12,7 @@ from nova_post_bot.core.exceptions import NovaPostTimeoutError, NovaPostAPIError
 from nova_post_bot.db.uow import UnitOfWork
 from nova_post_bot.enums.recipient_audit import SaveStatus
 from nova_post_bot.handlers.helpers.recipient import get_active_recipient_address_from_callback
+from nova_post_bot.handlers.helpers.shipment import show_shipment_confirmation
 from nova_post_bot.keyboards.cancel import cancel_keyboard
 from nova_post_bot.keyboards.main_menu import main_menu
 from nova_post_bot.keyboards.recipient_addresses import cities_keyboard, warehouse_keyboard, \
@@ -20,6 +21,8 @@ from nova_post_bot.schemas.warehouse import WarehouseInfo
 from nova_post_bot.services.recipient import RecipientService
 from nova_post_bot.services.recipient_address import RecipientAddressService
 from nova_post_bot.states.recipient_address import RecipientAddressStates, RecipientAddressEditStates
+from nova_post_bot.schemas.city import CityInfo
+from nova_post_bot.states.shipment import ShipmentStates
 
 router = Router()
 
@@ -46,8 +49,9 @@ async def choose_recipient_city(message: Message,
 
     await state.update_data(city_options=[city.model_dump() for city in cities])
     await state.set_state(RecipientAddressStates.waiting_for_city_selection)
-    await message.answer("Выберите населенный пункт:",
-                         reply_markup=cities_keyboard(cities))
+    selection_message = await message.answer("Выберите населенный пункт:",
+                                             reply_markup=cities_keyboard(cities))
+    await state.update_data(confirmation_message_id=selection_message.message_id)
 
 
 @router.callback_query(
@@ -77,7 +81,7 @@ async def select_recipient_city(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(RecipientAddressStates.waiting_for_warehouse_query)
     await callback.message.edit_text(f"Выбран город: {selected_city['name']}.")
-    await callback.message.answer("Введите номер отделения/почтомата или его начало только цифрами, без №",
+    await callback.message.answer("Введите номер отделения/почтомата или его начало только цифрами, без '№'",
                                   reply_markup=cancel_keyboard)
 
 
@@ -107,8 +111,11 @@ async def choose_recipient_warehouse(message: Message, state: FSMContext, nova_p
         await message.answer("Отделение/почтомат не найден. Проверьте номер или введите его начало")
         return
     await state.update_data(warehouse_options=[wh.model_dump() for wh in warehouses])
-    await message.answer("Выберите отделение/почтомат:",
-                         reply_markup=warehouse_keyboard(warehouses))
+
+    selection_message = await message.answer("Выберите отделение/почтомат:",
+                                             reply_markup=warehouse_keyboard(warehouses))
+
+    await state.update_data(confirmation_message_id=selection_message.message_id)
     await state.set_state(RecipientAddressStates.waiting_for_warehouse_selection)
 
 
@@ -201,8 +208,8 @@ async def confirm_recipient_address_creation(callback: CallbackQuery, state: FSM
             reply_markup=main_menu
         )
         return
-    await uow.commit()
-    await state.clear()
+    if save_status != SaveStatus.EXISTING:
+        await uow.commit()
     await callback.message.edit_reply_markup(reply_markup=None)
 
     if save_status == SaveStatus.CREATED:
@@ -211,13 +218,39 @@ async def confirm_recipient_address_creation(callback: CallbackQuery, state: FSM
         result_text = "Адрес восстановлен из архива"
     else:
         result_text = "Этот адрес уже есть у получателя"
-    await callback.message.answer(
+
+    address_text = (
         f"{result_text}\n"
         f"Название шаблона: {address.label}\n"
         f"Город: {address.city_name}\n"
-        f"Отделение/почтомат: {address.warehouse_name}",
-        reply_markup=main_menu
+        f"Отделение/почтомат: {address.warehouse_name}"
     )
+
+    if data.get("address_creation_origin") == "shipment":
+        keys_to_remove = (
+            "address_creation_origin",
+            "city_options",
+            "city_name",
+            "city_ref",
+            "warehouse_options",
+            "warehouse_ref",
+            "warehouse_name",
+            "label",
+            "confirmation_message_id",
+        )
+        for key in keys_to_remove:
+            data.pop(key, None)
+        data["recipient_address_id"] = str(address.id)
+        await state.set_data(data)
+        try:
+            await show_shipment_confirmation(callback.message, state, uow)
+        except ValueError as exs:
+            await state.clear()
+            await callback.message.answer(str(exs), reply_markup=main_menu)
+        return
+
+    await state.clear()
+    await callback.message.answer(address_text, reply_markup=main_menu)
 
 
 @router.callback_query(RecipientAddressStates.waiting_for_warehouse_selection, F.data.startswith("warehouse_page:"))
@@ -417,3 +450,36 @@ async def confirm_recipient_address_archive(callback: CallbackQuery, state: FSMC
     await callback.message.answer(f"Шаблон <b><u>{escape(address.label)}</u></b> архивирован.",
                                   parse_mode="HTML",
                                   reply_markup=main_menu)
+
+
+@router.callback_query(
+    RecipientAddressStates.waiting_for_city_selection,
+    F.data.startswith("recipient_city_page:"),
+)
+async def change_recipient_city_page(
+        callback: CallbackQuery,
+        state: FSMContext,
+):
+    try:
+        page = int(callback.data.split(":", 1)[1])
+    except ValueError:
+        await callback.answer("Некорректная страница.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    city_options = data.get("city_options", [])
+
+    page_size = 10
+    if page < 0 or page * page_size >= len(city_options):
+        await callback.answer("Эта страница недоступна.", show_alert=True)
+        return
+
+    cities = [
+        CityInfo.model_validate(item, by_name=True)
+        for item in city_options
+    ]
+
+    await callback.answer()
+    await callback.message.edit_reply_markup(
+        reply_markup=cities_keyboard(cities, page=page),
+    )

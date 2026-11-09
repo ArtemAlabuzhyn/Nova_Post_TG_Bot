@@ -16,8 +16,13 @@ class RecipientService:
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
 
-    async def list_recipients(self, limit: int = 10, offset: int = 0) -> list[Recipient]:
-        return await self.uow.recipients.list_recipients(limit=limit, offset=offset)
+    async def list_recipients(self, limit: int = 10, offset: int = 0,
+                              last_name_query: str | None = None) -> list[Recipient]:
+        if last_name_query is not None:
+            last_name_query = last_name_query.strip()
+            if not last_name_query:
+                raise ValueError("Last Name cannot be empty")
+        return await self.uow.recipients.list_recipients(limit=limit, offset=offset, last_name_query=last_name_query)
 
     async def get_by_id(self, recipient_id: uuid.UUID) -> Recipient:
         recipient = await self.uow.recipients.get_by_id(recipient_id=recipient_id)

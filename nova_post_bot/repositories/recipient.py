@@ -18,12 +18,17 @@ class RecipientRepository(BaseRepository):
     async def get_by_id(self, recipient_id: uuid.UUID) -> Recipient | None:
         return await self.session.get(Recipient, recipient_id)
 
-    async def list_recipients(self, limit: int = 10, offset: int = 0) -> list[Recipient]:
-        result = await self.session.execute(select(Recipient).where(Recipient.is_active.is_(True))
-                                            .order_by(Recipient.last_name,
-                                                      Recipient.first_name,
-                                                      Recipient.id,
-                                                      ).limit(limit).offset(offset))
+    async def list_recipients(self, limit: int = 10, offset: int = 0,
+                              last_name_query: str | None = None) -> list[Recipient]:
+        stmt = select(Recipient).where(Recipient.is_active.is_(True))
+
+        if last_name_query is not None:
+            stmt = stmt.where(Recipient.last_name.istartswith(last_name_query, autoescape=True))
+        stmt = (stmt.order_by(Recipient.last_name, Recipient.first_name, Recipient.id)
+                .limit(limit)
+                .offset(offset))
+
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def find_duplicate(self, first_name: str, last_name: str, phone: str) -> Recipient | None:

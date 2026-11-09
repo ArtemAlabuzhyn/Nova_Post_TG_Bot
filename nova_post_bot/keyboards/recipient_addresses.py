@@ -7,13 +7,43 @@ from nova_post_bot.schemas.city import CityInfo
 from nova_post_bot.schemas.warehouse import WarehouseInfo
 
 
-def cities_keyboard(cities: list[CityInfo]) -> InlineKeyboardMarkup:
+def cities_keyboard(
+    cities: list[CityInfo],
+    page: int = 0,
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for city in cities:
+    page_size = 10
+    start = page * page_size
+    end = start + page_size
+
+    for city in cities[start:end]:
         builder.button(
             text=f"{city.settlement_type} {city.name}, {city.area_name} обл.",
-            callback_data=f"recipient_city:{city.ref}")
+            callback_data=f"recipient_city:{city.ref}",
+        )
+
     builder.adjust(1)
+
+    navigation = []
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"recipient_city_page:{page - 1}",
+            )
+        )
+
+    if end < len(cities):
+        navigation.append(
+            InlineKeyboardButton(
+                text="Далее ➡️",
+                callback_data=f"recipient_city_page:{page + 1}",
+            )
+        )
+
+    if navigation:
+        builder.row(*navigation)
+
     return builder.as_markup()
 
 def warehouse_keyboard(warehouses: list[WarehouseInfo],

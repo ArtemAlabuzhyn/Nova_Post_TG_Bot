@@ -1,11 +1,14 @@
+import logging
+import time
+
 import httpx
 import pydantic
-import time
-import logging
 
 from nova_post_bot.core.exceptions import NovaPostUnexpectedResponseError, NovaPostAPIError, NovaPostTimeoutError, \
-    NovaPostConnectionError, NovaPostValidationError
+    NovaPostConnectionError, NovaPostValidationError, NovaPostRejectedError
 from nova_post_bot.schemas.city import CityInfo
+from nova_post_bot.schemas.contact_person import ContactPersonInfo
+from nova_post_bot.schemas.shipment import CreatedShipmentInfo
 from nova_post_bot.schemas.tracking import TrackingInfo
 from nova_post_bot.schemas.warehouse import WarehouseInfo
 
@@ -89,7 +92,9 @@ class NovaPostClient:
         if not success:
             error_codes = json_response.get("errorCodes")
             invalid_number_code = "20001401442"
-            if isinstance(error_codes, list):
+            if (model_name == "TrackingDocumentGeneral"
+                    and called_method == "getStatusDocuments"
+                    and isinstance(error_codes, list)):
                 if invalid_number_code in error_codes:
                     logger.warning(
                         "Nova Post API operation: method=%s success=False reason=invalid_tracking_number",
@@ -99,7 +104,7 @@ class NovaPostClient:
 
             logger.warning("Nova Post API operation: method=%s success=False, reason=api_error",
                            called_method)
-            raise NovaPostAPIError("Nova Post API reported an error")
+            raise NovaPostRejectedError("Nova Post API reported an error")
 
         data = json_response.get("data")
         if not isinstance(data, list):
@@ -170,3 +175,126 @@ class NovaPostClient:
         if not value:
             raise NovaPostValidationError(f"{field_name} cannot be empty")
         return value
+
+    async def get_sender_counterparties(self) -> list[dict]:
+        return await self._request(
+            model_name="Counterparty",
+            called_method="getCounterparties",
+            method_properties={
+                "CounterpartyProperty": "Sender",
+                "Page": "1",
+            }
+        )
+
+    async def get_counterparty_contact_persons(self, counterparty_ref: str, page: int = 1) -> list[dict]:
+        counterparty_ref = self._normalize_required_string(counterparty_ref,
+                                                           "CounterpartyRef")
+        if page < 1:
+            raise NovaPostValidationError("Page number must be 1")
+
+        return await self._request(
+            model_name="Counterparty",
+            called_method="getCounterpartyContactPersons",
+            method_properties={
+                "Ref": counterparty_ref,
+                "Page": str(page)
+            }
+        )
+
+    async def search_sender_warehouses(self,
+                                       city_ref: str,
+                                       query: str) -> list[WarehouseInfo]:
+        warehouses = await self.search_warehouses(city_ref=city_ref, query=query)
+        return [
+            warehouse for warehouse in warehouses
+            if warehouse.category == "Branch"
+        ]
+
+    async def get_recipient_counterparties(self, page: int = 1) -> list[dict]:
+        if page < 1:
+            raise NovaPostValidationError("Page number must be at least 1")
+
+        return await self._request(
+            model_name="Counterparty",
+            called_method="getCounterparties",
+            method_properties={
+                "CounterpartyProperty": "Recipient",
+                "Page": str(page),
+            }
+        )
+
+    async def create_shipment(self, method_properties: dict) -> CreatedShipmentInfo:
+        data = await self._request(model_name="InternetDocumentGeneral",
+                                   called_method="save",
+                                   method_properties=method_properties)
+        if len(data) != 1:
+            raise NovaPostUnexpectedResponseError(
+                f"Expected 1 created shipment, got {len(data)}"
+            )
+        try:
+            result = CreatedShipmentInfo.model_validate(data[0])
+        except pydantic.ValidationError as exc:
+            raise NovaPostUnexpectedResponseError("Invalid shipment response") from exc
+
+        return result
+
+    async def create_contact_person(self, first_name: str,
+                                    last_name: str, phone: str,
+                                    counterparty_ref: str) -> ContactPersonInfo:
+        first_name = self._normalize_required_string(first_name, "FirstName")
+        last_name = self._normalize_required_string(last_name, "LastName")
+        phone = self._normalize_required_string(phone, "Phone")
+        counterparty_ref = self._normalize_required_string(counterparty_ref, "CounterpartyRef")
+        data = await self._request(model_name="ContactPersonGeneral",
+                                   called_method="save",
+                                   method_properties={
+                                       "CounterpartyRef": counterparty_ref,
+                                       "FirstName": first_name,
+                                       "LastName": last_name,
+                                       "Phone": phone,
+                                       "MiddleName": ""
+                                   })
+
+        if len(data) != 1:
+            raise NovaPostUnexpectedResponseError(
+                f"Expected 1 created contact person, got {len(data)}"
+            )
+        try:
+            result = ContactPersonInfo.model_validate(data[0])
+        except pydantic.ValidationError as exc:
+            raise NovaPostUnexpectedResponseError("Invalid contact person response") from exc
+
+        return result
+
+    async def get_shipment_pdf(self, document_ref: str) -> bytes:
+        payload = {
+            "apiKey": self.api_key,
+            "modelName": "InternetDocument",
+            "calledMethod": "printFull",
+            "methodProperties": {
+                "DocumentRefs": [document_ref],
+                "Type": "pdf",
+                "printForm": "Document_new",
+                "PageFormat": "A4",
+                "Position": "1",
+                "Copies": "1",
+            },
+        }
+
+        response = await self.http_client.post("", json=payload)
+        response.raise_for_status()
+
+        if not response.content.startswith(b"%PDF-"):
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+
+            error_codes = body.get("errorCodes") if isinstance(body, dict) else None
+            content_type = response.headers.get("Content-Type", "не указан")
+            raise NovaPostUnexpectedResponseError(
+                f"printFull did not return a PDF: HTTP {response.status_code}, "
+                f"Content-Type: {content_type}, errorCodes: {error_codes!r}"
+            )
+
+        return response.content
