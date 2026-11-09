@@ -160,9 +160,26 @@ def shipment_recipient_addresses_keyboard(
                                      callback_data="shipment_address_create"))
     return builder.as_markup()
 
+
 def shipment_confirmation_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="Создать накладную", callback_data="shipment_confirm")
-    builder.button(text="Отмена", callback_data= "shipment_cancel")
+    builder.button(text="Отмена", callback_data="shipment_cancel")
     builder.adjust(1)
+    return builder.as_markup()
+
+
+def shipment_recipient_matches_keyboard(
+        recipients: list[Recipient]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for recipient in recipients:
+        builder.button(
+            text=f"{recipient.first_name} {recipient.last_name}",
+            callback_data=f"shipment_recipient:{recipient.id}",
+        )
+    builder.adjust(1)
+    builder.row(InlineKeyboardButton(
+        text="Продолжить создание",
+        callback_data="shipment_recipient_create_continue"
+    ))
     return builder.as_markup()

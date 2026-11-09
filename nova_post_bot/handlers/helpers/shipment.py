@@ -6,9 +6,12 @@ from aiogram.types import Message
 
 from nova_post_bot.core.exceptions import ObjectNotFoundError
 from nova_post_bot.db.uow import UnitOfWork
-from nova_post_bot.keyboards.shipment import shipment_confirmation_keyboard
+from nova_post_bot.keyboards.cancel import cancel_keyboard
+from nova_post_bot.keyboards.shipment import shipment_confirmation_keyboard, shipment_recipient_addresses_keyboard
+from nova_post_bot.models.recipient import Recipient
 from nova_post_bot.services.recipient import RecipientService
 from nova_post_bot.services.recipient_address import RecipientAddressService
+from nova_post_bot.states.recipient_address import RecipientAddressStates
 from nova_post_bot.states.shipment import ShipmentStates
 
 
@@ -53,3 +56,38 @@ async def show_shipment_confirmation(message: Message, state: FSMContext, uow: U
         reply_markup=shipment_confirmation_keyboard())
     await state.update_data(confirmation_message_id=confirmation_message.message_id)
     await state.set_state(ShipmentStates.waiting_for_confirmation)
+
+async def show_shipment_recipient_addresses(message: Message, state: FSMContext, uow: UnitOfWork, recipient: Recipient) -> None:
+    await state.update_data(recipient_id=str(recipient.id),
+                            recipient_creation_origin=None)
+
+    address_service = RecipientAddressService(uow=uow)
+    addresses = await address_service.list_addresses(recipient_id=recipient.id)
+
+    if not addresses:
+        await state.update_data(address_creation_origin="shipment")
+        await state.set_state(RecipientAddressStates.waiting_for_city_query)
+        await message.answer(f"Получатель: {recipient.last_name}, {recipient.first_name}\n\n"
+                                      f"Сохраненных адресов пока нет\n"
+                                      f"Введите город получения или его начало",
+                                      reply_markup=cancel_keyboard)
+        return
+
+    await message.answer("Выберите сохраненный адрес или укажите другой", reply_markup=cancel_keyboard)
+
+    lines = [
+        f"Получатель: {recipient.last_name}, {recipient.first_name}",
+        "",
+        "Адреса:"
+    ]
+    for index, address in enumerate(addresses, start=1):
+        lines.append(
+            f"{index}. {address.label}\n"
+            f"{address.city_name} — {address.warehouse_name}"
+        )
+
+    selection_message = await message.answer(
+        "\n".join(lines),
+        reply_markup=shipment_recipient_addresses_keyboard(addresses))
+    await state.update_data(confirmation_message_id=selection_message.message_id)
+    await state.set_state(ShipmentStates.choosing_recipient_address)

@@ -12,3 +12,5 @@ class ShipmentStates(StatesGroup):
     choosing_recipient_address = State()
     waiting_for_confirmation = State()
     waiting_for_recipient_search_query = State()
+    waiting_for_recipient_last_name = State()
+    choosing_recipient_match = State()

@@ -5,21 +5,25 @@ from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
+from sqlalchemy.dialects.mysql import match
 
 from nova_post_bot.enums.recipient_audit import SaveStatus
 from nova_post_bot.core.config import settings
 from nova_post_bot.core.exceptions import ObjectNotFoundError, ObjectAlreadyExistsError
 from nova_post_bot.db.uow import UnitOfWork
 from nova_post_bot.handlers.helpers.recipient import get_active_recipient_from_callback
+from nova_post_bot.handlers.helpers.shipment import show_shipment_recipient_addresses
 from nova_post_bot.keyboards.cancel import cancel_keyboard
 from nova_post_bot.keyboards.main_menu import main_menu
 from nova_post_bot.keyboards.recipients import recipients_keyboard, recipient_confirmation_keyboard, \
     recipient_card_keyboard, recipient_edit_keyboard, recipient_edit_confirm_keyboard, \
     recipient_archive_confirmation_keyboard, recipient_draft_edit_keyboard
+from nova_post_bot.keyboards.shipment import shipment_recipient_matches_keyboard
 from nova_post_bot.services.recipient import RecipientService, normalize_phone, normalize_recipient_name
 from nova_post_bot.services.recipient_address import RecipientAddressService
 from nova_post_bot.states.recipient import RecipientStates, RecipientEditStates, RecipientArchiveStates
 from nova_post_bot.states.recipient_address import RecipientAddressStates
+from nova_post_bot.states.shipment import ShipmentStates
 
 router = Router()
 
@@ -72,8 +76,8 @@ async def show_recipient(callback: CallbackQuery, uow: UnitOfWork):
 async def add_recipient(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    await state.set_state(RecipientStates.waiting_for_first_name)
-    await callback.message.answer("Введите имя получателя:",
+    await state.set_state(RecipientStates.waiting_for_last_name)
+    await callback.message.answer("Введите фамилию получателя:",
                                   reply_markup=cancel_keyboard)
 
 
@@ -86,13 +90,13 @@ async def process_recipient_first_name(message: Message, state: FSMContext):
                              "Дефис и апостроф допускаются только между буквами")
         return
     await state.update_data(first_name=first_name)
-    await state.set_state(RecipientStates.waiting_for_last_name)
-    await message.answer("Введите фамилию получателя:",
+    await state.set_state(RecipientStates.waiting_for_phone)
+    await message.answer("Введите номер телефона получателя в формате 0XXXXXXXXX:",
                          reply_markup=cancel_keyboard)
 
 
 @router.message(RecipientStates.waiting_for_last_name, F.text)
-async def process_recipient_last_name(message: Message, state: FSMContext):
+async def process_recipient_last_name(message: Message, state: FSMContext, uow: UnitOfWork):
     try:
         last_name = normalize_recipient_name(message.text)
     except ValueError:
@@ -100,8 +104,20 @@ async def process_recipient_last_name(message: Message, state: FSMContext):
                              "Дефис и апостроф допускаются только между буквами")
         return
     await state.update_data(last_name=last_name)
-    await state.set_state(RecipientStates.waiting_for_phone)
-    await message.answer("Введите номер телефона получателя в формате 0XXXXXXXXX:",
+    data = await state.get_data()
+    if data.get("recipient_creation_origin") == "shipment":
+        matches = await RecipientService(uow=uow).list_recipients(
+            limit=10, last_name_query=last_name)
+
+        if matches:
+            confirmation_message = await message.answer("Нашлись получатели с похожей фамилией. "
+                                                        "Выберите нужного получателя или продолжите создание",
+                                                        reply_markup=shipment_recipient_matches_keyboard(matches))
+            await state.update_data(confirmation_message_id=confirmation_message.message_id)
+            await state.set_state(ShipmentStates.choosing_recipient_match)
+            return
+    await state.set_state(RecipientStates.waiting_for_first_name)
+    await message.answer("Введите имя получателя:",
                          reply_markup=cancel_keyboard)
 
 
@@ -170,8 +186,17 @@ async def confirm_recipient_creation(callback: CallbackQuery, state: FSMContext,
     if save_status != SaveStatus.EXISTING:
         await uow.commit()
 
-    await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
+    if data.get("recipient_creation_origin") == "shipment":
+        await show_shipment_recipient_addresses(
+            message=callback.message,
+            state=state,
+            uow=uow,
+            recipient=recipient
+        )
+        return
+
+    await state.clear()
     if save_status == SaveStatus.CREATED:
         result_text = "Получатель сохранен"
     elif save_status == SaveStatus.RESTORED:
@@ -229,12 +254,12 @@ async def choose_recipient_edit_field(
     allowed_edit_fields = ["first_name", "last_name", "phone"]
     if field_name not in allowed_edit_fields:
         await callback.answer("Разрешено менять только имя, фамилию или телефон",
-                                      show_alert=True)
+                              show_alert=True)
         return
 
     if recipient_id_text != data.get("recipient_id"):
         await callback.answer("Эта кнопка относится к другому получателю. Используйте актуальное меню",
-                                      show_alert=True)
+                              show_alert=True)
         return
     await callback.answer()
 
