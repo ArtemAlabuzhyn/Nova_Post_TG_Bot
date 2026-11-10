@@ -3,6 +3,7 @@ services:
   app:
     build: .
     container_name: nova_post_bot
+    restart: unless-stopped
     env_file:
       - .env
     depends_on:
@@ -12,12 +13,11 @@ services:
 
   postgres:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
