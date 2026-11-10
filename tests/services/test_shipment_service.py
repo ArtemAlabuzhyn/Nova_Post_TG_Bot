@@ -10,14 +10,14 @@ async def test_get_recipient_contact_ref_finds_contact_on_second_page():
     client = MagicMock()
     client.get_counterparty_contact_persons = AsyncMock(
         side_effect=[
-            [{"Phones": "380501111111", "Ref": "other-ref", "FirstName": "Іван", "LastName": "Петренко"}],
-            [{"Phones": "380502222222", "Ref": "target-ref", "FirstName": "Іван", "LastName": "Петренко"}],
+            [{"Phones": "380501111111", "Ref": "other-ref", "FirstName": "Іван", "LastName": "Петренченко"}],
+            [{"Phones": "380501111111", "Ref": "target-ref", "FirstName": "Іван", "LastName": "Петренко"}],
             []
         ]
     )
     shipment_service = ShipmentService(uow=MagicMock())
     result = await shipment_service.get_recipient_contact_ref(client, recipient_ref="test-ref",
-                                                              recipient_phone="380502222222",
+                                                              recipient_phone="380501111111",
                                                               first_name="Іван", last_name="Петренко")
     assert result == "target-ref"
 
@@ -48,7 +48,8 @@ def test_find_recipient_contact_ref():
             "LastName": "Петренко",
         }
     ]
-    with pytest.raises(ValueError, match="name doesn't match"):
-        shipment_service.find_recipient_contact_ref(contacts=contacts, recipient_phone="380501111111",
-                                                    first_name="Іван",
-                                                    last_name="Іваненко")
+    result = shipment_service.find_recipient_contact_ref(
+        contacts=contacts, recipient_phone="380501111111",
+        first_name="Іван", last_name="Іваненко"
+    )
+    assert result is None

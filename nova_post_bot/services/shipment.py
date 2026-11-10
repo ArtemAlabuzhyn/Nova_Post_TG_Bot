@@ -115,7 +115,7 @@ class ShipmentService:
                 if (
                         contact_first_name != first_name.strip().casefold()
                         or contact_last_name != last_name.strip().casefold()):
-                    raise ValueError("Nova Post contact name doesn't match the recipient")
+                    continue
                 matching_refs.add(ref)
         if not matching_refs:
             return None
