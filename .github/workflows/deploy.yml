@@ -1,0 +1,80 @@
+name: Deploy bot
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+      - name: Deploy on server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$DEPLOY_USER@$DEPLOY_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/Nova_Post_TG_Bot
+
+          test "$(git branch --show-current)" = "develop"
+          test -z "$(git status --porcelain)"
+
+          git pull --ff-only origin develop
+          sudo -n docker compose config -q
+          sudo -n docker compose build app
+
+          sudo -n docker compose stop app
+
+          if ! sudo -n docker compose run --rm --no-deps app \
+            python -m alembic upgrade head; then
+            echo "Migration failed. Bot remains stopped; check the database before restarting."
+            exit 1
+          fi
+
+          sudo -n docker compose up -d --no-deps --force-recreate app
+          sleep 10
+
+          container_id=$(sudo -n docker compose ps -q app)
+          test -n "$container_id"
+
+          status=$(sudo -n docker inspect --format '{{.State.Status}}' "$container_id")
+          restarts=$(sudo -n docker inspect --format '{{.RestartCount}}' "$container_id")
+
+          sudo -n docker compose logs --tail=30 app
+          test "$status" = "running"
+          test "$restarts" = "0"
+          REMOTE
+
+      - name: Remove deployment key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
