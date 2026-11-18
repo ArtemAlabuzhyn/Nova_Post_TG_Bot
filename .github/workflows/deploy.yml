@@ -55,7 +55,7 @@ jobs:
 
           sudo -n docker compose stop app
 
-          if ! sudo -n docker compose run --rm --no-deps app \
+          if ! sudo -n docker compose run -T --interactive=false --rm --no-deps app \
             python -m alembic upgrade head; then
             echo "Migration failed. Bot remains stopped; check the database before restarting."
             exit 1
