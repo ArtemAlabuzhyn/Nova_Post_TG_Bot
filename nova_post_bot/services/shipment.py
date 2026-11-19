@@ -25,6 +25,24 @@ class ShipmentService:
             raise ObjectNotFoundError(object_id=shipment_id, object_name='Shipment')
         return shipment
 
+    async def get_by_document_number(self, document_number: str) -> Shipment:
+        document_number = document_number.strip()
+        if (
+                len(document_number) != 14
+                or not document_number.isascii()
+                or not document_number.isdigit()
+        ):
+            raise ValueError("Document number must contain 14 digits")
+        shipment = await self.uow.shipments.get_by_document_number(
+            document_number=document_number
+        )
+        if shipment is None:
+            raise ObjectNotFoundError(
+                object_id=document_number,
+                object_name='Shipment',
+            )
+
+        return shipment
     async def prepare_shipment(self, shipment_id: uuid.UUID,
                                recipient_id: uuid.UUID, recipient_address_id: uuid.UUID,
                                created_by_telegram_id: int, created_by_name: str,
@@ -198,4 +216,3 @@ class ShipmentService:
             raise ValueError("Shipment is not in creating status")
         shipment.status = status.value
         return shipment
-

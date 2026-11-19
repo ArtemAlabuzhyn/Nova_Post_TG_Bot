@@ -18,6 +18,7 @@ from nova_post_bot.handlers.recipients import router as recipient_router
 from nova_post_bot.handlers.cancel import router as cancel_router
 from nova_post_bot.handlers.shipment import router as shipment_router
 from nova_post_bot.handlers.recipient_addresses import router as recipient_addresses_router
+from nova_post_bot.handlers.shipment_request_info import router as shipment_request_info_router
 
 bot = Bot(token=settings.telegram_bot_token)
 
@@ -30,6 +31,7 @@ dp.include_router(start_router)
 dp.include_router(help_router)
 dp.include_router(menu_router)
 dp.include_router(cancel_router)
+dp.include_router(shipment_request_info_router)
 dp.include_router(recipient_addresses_router)
 dp.include_router(tracking_router)
 dp.include_router(shipment_router)

@@ -11,6 +11,12 @@ class Settings(BaseSettings):
 
     allowed_telegram_ids: dict[int, str] = Field(default_factory=dict, validation_alias='ALLOWED_TELEGRAM_IDS')
 
+    shipment_request_info_allowed_ids: set[int] = Field(
+        default_factory=set,
+        validation_alias='SHIPMENT_REQUEST_INFO_ALLOWED_IDS',
+    )
+
+
 
 
     app_env: str = Field(

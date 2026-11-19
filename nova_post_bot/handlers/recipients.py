@@ -5,16 +5,15 @@ from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
-from sqlalchemy.dialects.mysql import match
 
-from nova_post_bot.enums.recipient_audit import SaveStatus
 from nova_post_bot.core.config import settings
 from nova_post_bot.core.exceptions import ObjectNotFoundError, ObjectAlreadyExistsError
 from nova_post_bot.db.uow import UnitOfWork
+from nova_post_bot.enums.recipient_audit import SaveStatus
 from nova_post_bot.handlers.helpers.recipient import get_active_recipient_from_callback
 from nova_post_bot.handlers.helpers.shipment import show_shipment_recipient_addresses
 from nova_post_bot.keyboards.cancel import cancel_keyboard
-from nova_post_bot.keyboards.main_menu import main_menu
+from nova_post_bot.keyboards.main_menu import build_main_menu
 from nova_post_bot.keyboards.recipients import recipients_keyboard, recipient_confirmation_keyboard, \
     recipient_card_keyboard, recipient_edit_keyboard, recipient_edit_confirm_keyboard, \
     recipient_archive_confirmation_keyboard, recipient_draft_edit_keyboard
@@ -153,7 +152,9 @@ async def cancel_recipient_creation(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer("Создание получателя отменено.", reply_markup=main_menu)
+    await callback.message.answer("Создание получателя отменено.", reply_markup=build_main_menu(show_request_info=(
+            callback.from_user.id in settings.shipment_request_info_allowed_ids
+    )))
 
 
 @router.callback_query(
@@ -180,7 +181,9 @@ async def confirm_recipient_creation(callback: CallbackQuery, state: FSMContext,
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Получатель с такими данными уже существует.",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
 
     if save_status != SaveStatus.EXISTING:
@@ -214,7 +217,9 @@ async def confirm_recipient_creation(callback: CallbackQuery, state: FSMContext,
                                       reply_markup=cancel_keyboard)
         return
     await callback.message.answer(recipient_text,
-                                  reply_markup=main_menu)
+                                  reply_markup=build_main_menu(show_request_info=(
+                                          callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                  )))
 
 
 @router.callback_query(F.data.startswith("recipient_edit:"))
@@ -314,7 +319,9 @@ async def cancel_recipient_edit(
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer("Редактирование получателя отменено",
-                                  reply_markup=main_menu)
+                                  reply_markup=build_main_menu(show_request_info=(
+                                          callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                  )))
 
 
 @router.callback_query(RecipientEditStates.waiting_for_confirmation,
@@ -352,15 +359,18 @@ async def confirm_recipient_edit(
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
             "Получатель не найден, откройте список получателей заново",
-            reply_markup=main_menu
-        )
+            reply_markup=build_main_menu(show_request_info=(
+                    callback.from_user.id in settings.shipment_request_info_allowed_ids
+            )))
         return
     except ValueError:
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Не удалось изменить данные: получатель архивирован "
                                       "или новое значение не корректно. Начните редактирование заново",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     await uow.commit()
     await state.clear()
@@ -369,7 +379,9 @@ async def confirm_recipient_edit(
                                   f"Имя: {recipient.first_name}\n"
                                   f"Фамилия: {recipient.last_name}\n"
                                   f"Телефон: {recipient.phone}",
-                                  reply_markup=main_menu)
+                                  reply_markup=build_main_menu(show_request_info=(
+                                          callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                  )))
 
 
 @router.callback_query(F.data.startswith("recipient_archive:"))
@@ -404,8 +416,9 @@ async def cancel_recipient_archive(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer(
         "Архивирование получателя отменено",
-        reply_markup=main_menu
-    )
+        reply_markup=build_main_menu(show_request_info=(
+                callback.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
 
 
 @router.callback_query(RecipientArchiveStates.waiting_for_confirmation,
@@ -427,8 +440,9 @@ async def confirm_recipient_archive(callback: CallbackQuery, state: FSMContext, 
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
             "Получатель не найден",
-            reply_markup=main_menu
-        )
+            reply_markup=build_main_menu(show_request_info=(
+                    callback.from_user.id in settings.shipment_request_info_allowed_ids
+            )))
         return
     await uow.commit()
     await state.clear()
@@ -436,8 +450,9 @@ async def confirm_recipient_archive(callback: CallbackQuery, state: FSMContext, 
     await callback.message.answer(
         f"Получатель {recipient.first_name} {recipient.last_name} \n"
         f"архивирован",
-        reply_markup=main_menu
-    )
+        reply_markup=build_main_menu(show_request_info=(
+                callback.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
 
 
 @router.callback_query(RecipientStates.waiting_for_confirmation,

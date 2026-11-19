@@ -20,7 +20,7 @@ from nova_post_bot.handlers.helpers.recipient import get_active_recipient_from_c
     get_active_recipient_address_from_callback
 from nova_post_bot.handlers.helpers.shipment import show_shipment_confirmation, show_shipment_recipient_addresses
 from nova_post_bot.keyboards.cancel import cancel_keyboard
-from nova_post_bot.keyboards.main_menu import main_menu
+from nova_post_bot.keyboards.main_menu import build_main_menu
 from nova_post_bot.keyboards.shipment import (
     shipment_recipient_keyboard,
     shipment_recipient_action_keyboard, )
@@ -47,6 +47,7 @@ def build_shipment_pdf_filename(
 ):
     return (f"{sender_city}-{recipient_city} "
             f"({recipient_last_name}) {shipment_date:%d.%m}.pdf")
+
 
 @router.message(F.text == "Создать накладную")
 async def start_creating_shipment(message: Message, state: FSMContext):
@@ -402,6 +403,7 @@ async def select_shipment_recipient(callback: CallbackQuery, state: FSMContext, 
         recipient=recipient,
     )
 
+
 @router.callback_query(ShipmentStates.choosing_recipient_match,
                        F.data == "shipment_recipient_create_continue")
 async def continue_creating_recipient(callback: CallbackQuery, state: FSMContext):
@@ -431,7 +433,9 @@ async def select_shipment_address(
         await show_shipment_confirmation(callback.message, state, uow)
     except ValueError as exs:
         await state.clear()
-        await callback.message.answer(f"{str(exs)}", reply_markup=main_menu)
+        await callback.message.answer(f"{str(exs)}", reply_markup=build_main_menu(show_request_info=(
+                callback.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
 
 
 @router.callback_query(ShipmentStates.choosing_recipient_address,
@@ -453,7 +457,9 @@ async def cancel_shipment_confirmation(callback: CallbackQuery, state: FSMContex
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
     await state.clear()
-    await callback.message.answer("Создание накладной отменено", reply_markup=main_menu)
+    await callback.message.answer("Создание накладной отменено", reply_markup=build_main_menu(show_request_info=(
+            callback.from_user.id in settings.shipment_request_info_allowed_ids
+    )))
 
 
 @router.callback_query(ShipmentStates.choosing_recipient,
@@ -513,7 +519,9 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
         await callback.message.edit_reply_markup(reply_markup=None)
         await state.clear()
         await callback.message.answer("Не удалось подготовить накладную: данные отсутствуют или больше недоступны. "
-                                      "Начните создание заново.", reply_markup=main_menu)
+                                      "Начните создание заново.", reply_markup=build_main_menu(show_request_info=(
+                callback.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
         return
 
     await uow.commit()
@@ -544,7 +552,9 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
         await callback.message.answer("Не удалось подготовить данные получателя для накладной. "
                                       "Проверьте получателя и адрес в адресной книге и начните создание заново."
                                       " Накладная не создана.",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     except (NovaPostAPIError, NovaPostTimeoutError,
             NovaPostConnectionError, NovaPostUnexpectedResponseError,
@@ -563,7 +573,9 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
         await callback.message.answer("Не удалось подготовить данные получателя в Новой почте. "
                                       "Попробуйте создать накладную позже. "
                                       "Накладная не создана",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
 
         return
 
@@ -577,7 +589,9 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Новая почта отклонила создание накладной. Накладная не создана.",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     except (NovaPostTimeoutError, NovaPostConnectionError,
             NovaPostAPIError, NovaPostUnexpectedResponseError) as ex:
@@ -590,7 +604,9 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
         await callback.message.answer("Не удалось получить подтверждение от Новой почты. "
                                       "Накладная могла быть создана. "
                                       "Перед новой попыткой проверьте личный кабинет НП.",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     try:
         await shipment_service.mark_created(shipment_id=shipment.id, created_info=created_info)
@@ -604,7 +620,10 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(f"Накладная создана: {created_info.document_number}. "
                                       "Не удалось сохранить её в историю бота. "
-                                      "Создавать повторно не нужно, она доступна в кабинете НП", reply_markup=main_menu)
+                                      "Создавать повторно не нужно, она доступна в кабинете НП",
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
@@ -612,7 +631,7 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
                                            recipient_city=address.city_name,
                                            recipient_last_name=recipient.last_name,
                                            shipment_date=datetime.strptime(
-                                               method_properties["DateTime"], "%d.%m.%Y").date(),)
+                                               method_properties["DateTime"], "%d.%m.%Y").date(), )
 
     try:
         pdf_bytes = await nova_post_client.get_shipment_pdf(created_info.document_ref)
@@ -622,16 +641,19 @@ async def confirm_shipment_creation(callback: CallbackQuery, state: FSMContext, 
     except (httpx.HTTPError, NovaPostUnexpectedResponseError, TelegramAPIError) as exc:
         logger.warning("Couldn't deliver shipment PDF: document_number=%s, error_type=%s",
                        created_info.document_number,
-                       type(exc).__name__,)
+                       type(exc).__name__, )
         await callback.message.answer(f"Накладная №{created_info.document_number} создана. "
                                       "Не удалось отправить PDF. Попросите Артема/Ярослава скачать его в кабинете НП",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
     else:
         await callback.message.answer(
             f"Накладная №<code>{created_info.document_number}</code> создана. ",
             parse_mode="HTML",
-            reply_markup=main_menu,
-        )
+            reply_markup=build_main_menu(show_request_info=(
+                    callback.from_user.id in settings.shipment_request_info_allowed_ids
+            )))
 
 
 @router.callback_query(ShipmentStates.choosing_recipient,

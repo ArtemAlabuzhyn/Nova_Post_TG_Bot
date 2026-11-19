@@ -1,17 +1,16 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 
-track_button = KeyboardButton(text="Отследить ТТН")
-shipments_button = KeyboardButton(text="Мои отправки")
-create_shipment_button = KeyboardButton(text="Создать накладную")
-recipients = KeyboardButton(text="Получатели")
+def build_main_menu(*, show_request_info: bool = False) -> ReplyKeyboardMarkup:
+    keyboard = [
+        [KeyboardButton(text="Отследить ТТН")],
+        [KeyboardButton(text="Мои отправки")],
+        [KeyboardButton(text="Создать накладную")],
+        [KeyboardButton(text="Получатели")]
+    ]
+    if show_request_info:
+        keyboard.append([KeyboardButton(text="Кто запросил")])
 
-main_menu = ReplyKeyboardMarkup(
-    keyboard=[
-        [track_button],
-        [shipments_button],
-        [create_shipment_button],
-        [recipients]
-    ],
-    resize_keyboard=True
-)
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,)
