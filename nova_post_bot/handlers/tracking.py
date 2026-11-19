@@ -2,10 +2,11 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from nova_post_bot.core.config import settings
 from nova_post_bot.core.exceptions import NovaPostAPIError, NovaPostValidationError, NovaPostTimeoutError
 from nova_post_bot.formatters.tracking import format_tracking_info
 from nova_post_bot.keyboards.cancel import cancel_keyboard
-from nova_post_bot.keyboards.main_menu import main_menu
+from nova_post_bot.keyboards.main_menu import build_main_menu
 from nova_post_bot.services.tracking import TrackingService
 from nova_post_bot.states.tracking import TrackingStates
 
@@ -38,12 +39,17 @@ async def process_tracking_number(message: Message, state: FSMContext,
 
     await state.clear()
     if tracking_items == []:
-        await message.answer("Информация по этой ТТН не найдена.", reply_markup=main_menu)
+        await message.answer("Информация по этой ТТН не найдена.", reply_markup=build_main_menu(show_request_info=(
+                message.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
         return
 
     for tracking_item in tracking_items:
         text = format_tracking_info(tracking_item)
-        await message.answer(text, parse_mode="HTML", reply_markup=main_menu)
+        await message.answer(text, parse_mode="HTML", reply_markup=build_main_menu(show_request_info=(
+                message.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
+
 
 @router.message(TrackingStates.waiting_for_number, ~F.text)
 async def process_tracking_non_text(message: Message):

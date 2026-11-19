@@ -1,9 +1,9 @@
 import uuid
+from html import escape
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
-from html import escape
 
 from nova_post_bot.clients.nova_post import NovaPostClient
 from nova_post_bot.core.config import settings
@@ -14,15 +14,14 @@ from nova_post_bot.enums.recipient_audit import SaveStatus
 from nova_post_bot.handlers.helpers.recipient import get_active_recipient_address_from_callback
 from nova_post_bot.handlers.helpers.shipment import show_shipment_confirmation
 from nova_post_bot.keyboards.cancel import cancel_keyboard
-from nova_post_bot.keyboards.main_menu import main_menu
+from nova_post_bot.keyboards.main_menu import build_main_menu
 from nova_post_bot.keyboards.recipient_addresses import cities_keyboard, warehouse_keyboard, \
     address_confirmation_keyboard, recipient_address_card_keyboard, recipient_address_archive_confirmation_keyboard
+from nova_post_bot.schemas.city import CityInfo
 from nova_post_bot.schemas.warehouse import WarehouseInfo
 from nova_post_bot.services.recipient import RecipientService
 from nova_post_bot.services.recipient_address import RecipientAddressService
 from nova_post_bot.states.recipient_address import RecipientAddressStates, RecipientAddressEditStates
-from nova_post_bot.schemas.city import CityInfo
-from nova_post_bot.states.shipment import ShipmentStates
 
 router = Router()
 
@@ -173,7 +172,9 @@ async def cancel_recipient_address_creation(callback: CallbackQuery, state: FSMC
     await callback.answer()
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer("Добавление адреса отменено", reply_markup=main_menu)
+    await callback.message.answer("Добавление адреса отменено", reply_markup=build_main_menu(show_request_info=(
+            callback.from_user.id in settings.shipment_request_info_allowed_ids
+    )))
 
 
 @router.callback_query(RecipientAddressStates.waiting_for_confirmation,
@@ -197,7 +198,9 @@ async def confirm_recipient_address_creation(callback: CallbackQuery, state: FSM
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(f"Получатель не найден. Откройте список получателей заново",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     except ValueError:
         await state.clear()
@@ -205,8 +208,9 @@ async def confirm_recipient_address_creation(callback: CallbackQuery, state: FSM
         await callback.message.answer(
             "Не удалось сохранить адрес: данные некорректны "
             "или получатель архивирован. Начните добавление адреса заново",
-            reply_markup=main_menu
-        )
+            reply_markup=build_main_menu(show_request_info=(
+                    callback.from_user.id in settings.shipment_request_info_allowed_ids
+            )))
         return
     if save_status != SaveStatus.EXISTING:
         await uow.commit()
@@ -246,11 +250,15 @@ async def confirm_recipient_address_creation(callback: CallbackQuery, state: FSM
             await show_shipment_confirmation(callback.message, state, uow)
         except ValueError as exs:
             await state.clear()
-            await callback.message.answer(str(exs), reply_markup=main_menu)
+            await callback.message.answer(str(exs), reply_markup=build_main_menu(show_request_info=(
+                    callback.from_user.id in settings.shipment_request_info_allowed_ids
+            )))
         return
 
     await state.clear()
-    await callback.message.answer(address_text, reply_markup=main_menu)
+    await callback.message.answer(address_text, reply_markup=build_main_menu(show_request_info=(
+            callback.from_user.id in settings.shipment_request_info_allowed_ids
+    )))
 
 
 @router.callback_query(RecipientAddressStates.waiting_for_warehouse_selection, F.data.startswith("warehouse_page:"))
@@ -361,18 +369,25 @@ async def edit_address_label(message: Message, state: FSMContext, uow: UnitOfWor
     except ObjectNotFoundError:
         await state.clear()
         await message.answer("Адрес или получатель не найден. Откройте список получателей заново",
-                             reply_markup=main_menu)
+                             reply_markup=build_main_menu(show_request_info=(
+                                     message.from_user.id in settings.shipment_request_info_allowed_ids
+                             )))
         return
     except ValueError:
         await state.clear()
         await message.answer(
             "Не удалось переименовать шаблон. Адрес или получатель архивированы",
-            reply_markup=main_menu)
+            reply_markup=build_main_menu(show_request_info=(
+                    message.from_user.id in settings.shipment_request_info_allowed_ids
+            )))
         return
 
     if old_label == address.label:
         await state.clear()
-        await message.answer("Название не изменилось, шаблон уже так и называется", reply_markup=main_menu)
+        await message.answer("Название не изменилось, шаблон уже так и называется",
+                             reply_markup=build_main_menu(show_request_info=(
+                                     message.from_user.id in settings.shipment_request_info_allowed_ids
+                             )))
         return
 
     await uow.commit()
@@ -381,7 +396,9 @@ async def edit_address_label(message: Message, state: FSMContext, uow: UnitOfWor
     await message.answer(f"Название шаблона изменено на: \n\n"
                          f"<b><u> {escape(address.label)}</u></b>",
                          parse_mode="HTML",
-                         reply_markup=main_menu)
+                         reply_markup=build_main_menu(show_request_info=(
+                                 message.from_user.id in settings.shipment_request_info_allowed_ids
+                         )))
 
 
 @router.callback_query(F.data.startswith("address_archive:"))
@@ -416,7 +433,9 @@ async def cancel_recipient_address_archive(callback: CallbackQuery, state: FSMCo
     await callback.answer()
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer("Архивирование адреса отменено", reply_markup=main_menu)
+    await callback.message.answer("Архивирование адреса отменено", reply_markup=build_main_menu(show_request_info=(
+            callback.from_user.id in settings.shipment_request_info_allowed_ids
+    )))
 
 
 @router.callback_query(RecipientAddressStates.waiting_for_archive_confirmation,
@@ -436,20 +455,26 @@ async def confirm_recipient_address_archive(callback: CallbackQuery, state: FSMC
     except ObjectNotFoundError:
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer("Адрес получателя не найден", reply_markup=main_menu)
+        await callback.message.answer("Адрес получателя не найден", reply_markup=build_main_menu(show_request_info=(
+                callback.from_user.id in settings.shipment_request_info_allowed_ids
+        )))
         return
     except ValueError:
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Нельзя архивировать адрес архивного получателя",
-                                      reply_markup=main_menu)
+                                      reply_markup=build_main_menu(show_request_info=(
+                                              callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                      )))
         return
     await uow.commit()
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer(f"Шаблон <b><u>{escape(address.label)}</u></b> архивирован.",
                                   parse_mode="HTML",
-                                  reply_markup=main_menu)
+                                  reply_markup=build_main_menu(show_request_info=(
+                                          callback.from_user.id in settings.shipment_request_info_allowed_ids
+                                  )))
 
 
 @router.callback_query(
